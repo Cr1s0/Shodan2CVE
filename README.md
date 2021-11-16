@@ -1,6 +1,7 @@
 # Shodan2CVE
 
 The object of this script is to gather public vulnerabilities from IPs or domains, based on Shodan.
+The collected data includes IP, domain, CVE-ID, CVSS and risk (v3 and v2), provider and product affected.
 
 Although you can find some screenshots with examples, the available options are:
 
