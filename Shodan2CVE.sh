@@ -4,8 +4,8 @@
 #description     :This script will gather public vulnerabilities from IPs or domains, show stats and print CVE information. 
 #data source	 :OSINT
 #author		 :Cr1s0 - https://github.com/Cr1s0
-#date            :2021-11-16
-#version         :1.3
+#date            :2021-11-17
+#version         :1.4   
 #notes           :Before execution, start "shodan" with a subscription plan API_KEY
 #		 :Install 'jq'
 #==============================================================================
@@ -30,7 +30,7 @@ function credits () {
 	  Y8888P   888  888   Y88P     Y88888  Y888888 888  888 888888888    Y8888P       Y8P     8888888888" 
 	tput setaf 3
 	printf "\n
-	*******************************        Author: Cr1s0 - v1.3         ********************************\n\n"
+	*******************************        Author: Cr1s0 - v1.4         ********************************\n\n"
 	tput sgr0
 }
 
@@ -45,18 +45,16 @@ function cleaning () { #Delete unnecessary files.
 function save_CVEs_from_active () { #Use of Shodan to save each CVE in a temporary file.
 	echo "Saving IP - Domain - CVE - CVSS - Provider - Product. Please check $HOME/Desktop/Shodan2CVE/CVE/$1.txt"
 	shodan host $1 | grep -Po 'CVE-\K\S+' >| $HOME/Desktop/Shodan2CVE/CVE/temp.txt
-
-	#Append "CVE-" to each line
 	awk '{print "CVE-" $0;}' $HOME/Desktop/Shodan2CVE/CVE/temp.txt >| $HOME/Desktop/Shodan2CVE/CVE/CVEs_$1.txt
 	gather_domain_CVSS_product_from_CVE $1 $HOME/Desktop/Shodan2CVE/CVE/CVEs_$1.txt
 }
 
 function gather_domain_CVSS_product_from_CVE () {
-	#Retrieve NIST response with 'wget' to save CVSS-risk pairs. Data treatment based in our needs.
+	#Retrieve NIST response with 'wget', to save CVSS-risk pairs. Data treatment based in our needs.
 	if [ -f "$HOME/Desktop/Shodan2CVE/CVE/CVEs_$1.txt" ]; then
 		rm $HOME/Desktop/Shodan2CVE/CVE/$1.txt &>/dev/null
 	fi	
-
+	
 	shodan download results ip:$1 &>/dev/null
 	domain=$(shodan parse --fields domains results.json.gz | tail -1) &>/dev/null
 	
@@ -95,7 +93,7 @@ function gather_domain_CVSS_product_from_CVE () {
 	done < "$2"
 	insertColumns $HOME/Desktop/Shodan2CVE/CVE/$1.txt
 	
-	#If the active does not have published CVEs, we create an empty file. Otherwise, statistics() will loop infinitely.
+	#If the active does not have published CVEs, we create an empty file. Otherwise, statistics() function will loop infinitely.
 	if [ ! -f "$HOME/Desktop/Shodan2CVE/CVE/$1.txt" ]; then
 		touch $HOME/Desktop/Shodan2CVE/CVE/$1.txt
 	fi
@@ -114,7 +112,7 @@ function gather_product_from_CVE () {
 	provider_product=${vendor^}';'${product^}
 }
 
-function insertColumns () { #Append headers merged file.
+function insertColumns () { #Append headers to the merged file.
 	sed -i '1i IP;Domain;CVE_ID;CVSS_v3;Risk_v3;CVSS_v2;Risk_v2;Provider;Product' $1 &>/dev/null
 }
 
@@ -147,8 +145,7 @@ function merge_files () {
 		exec 5<&- #Close file.
 		#Redirect stdout for this section into final_file.csv.
 	done > $HOME/Desktop/Shodan2CVE/$1.csv
-	
-	if [[ $(head -n 1 $HOME/Desktop/Shodan2CVE/$1.csv) == '' ]]; then #Ensure that the first line of merged file is the header. 
+	if [[ $(head -n 1 $HOME/Desktop/Shodan2CVE/$1.csv) == '' ]]; then #Ensure that the first line of merged file is the header.
 			header="IP;Domain;CVE_ID;CVSS_v3;Risk_v3;CVSS_v2;Risk_v2;Provider;Product" 
 			sed -i "1s/.*/$header/" $HOME/Desktop/Shodan2CVE/$1.csv &>/dev/null
 	fi	
@@ -166,13 +163,13 @@ function statistics () {
 		else
 			for file in $HOME/Desktop/Shodan2CVE/CVE/$1.txt #'$1' corresponds to each IP
 			do
-				#Stats CVSSv3.
+				#Stats CVSSv3
 				ncrit3=$(cat CVE/$1.txt | cut -d ';' -f5 | grep -c "CRITICAL")
 				nhigh3=$(cat CVE/$1.txt | cut -d ';' -f5 | grep -c "HIGH")
 				nmedium3=$(cat CVE/$1.txt | cut -d ';' -f5 | grep -c "MEDIUM")
 				nlow3=$(cat CVE/$1.txt | cut -d ';' -f5 | grep -c "LOW")
 				nna3=$(cat CVE/$1.txt | cut -d ';' -f5 | grep -c "N/A")
-				#Stats CVSSv2.
+				#Stats CVSSv2
 				ncrit2=$(cat CVE/$1.txt | cut -d ';' -f7 | grep -c "CRITICAL")
 				nhigh2=$(cat CVE/$1.txt | cut -d ';' -f7 | grep -c "HIGH")
 				nmedium2=$(cat CVE/$1.txt | cut -d ';' -f7 | grep -c "MEDIUM")
@@ -186,8 +183,8 @@ function statistics () {
 			done
 		fi
 	else #If the second argument is a domain, show stats for each IP.
-		echo -e "--- Getting stats for $1"
-		check_if_ip_or_domain $1 #As index, the next "for" will use the value of the global variable "stats_for_domain".	
+		echo -e "--- Getting stats for $1 IPs"
+		check_if_ip_or_domain $1 stats #As index, the next "for" will use the global variable "stats_for_domain".
 		for ip in $(echo $stats_for_domain | sed "s/,/ /g") #For each comma-separated IP, print statistics results.
 		do
 			if [[ ! "$ip" =~ [A-Za-z:space:] ]]; then #If no letters or spaces, "$ip" is an IP so stats are printed.
@@ -299,8 +296,8 @@ function printStats () {
 	printf ' '${10}'-'$8'-'$6'-'$4'-'$2'\n\n'
 }
 
-function check_if_ip_or_domain () { #The object of this function is to execute Shodan2CVE() with the IP of "www.domain.tld" and "domain.tld".
-	if [[ "$1" =~ [A-Za-z:space:] ]]; then #If "$1" is a domain, the variable is treated as needed.
+function check_if_ip_or_domain () { #The object of this function is to execute Shodan2CVE() with IP of "www.domain.tld" and "domain.tld".
+	if [[ "$1" =~ [A-Za-z:space:] ]]; then #If "$1" is a domain and the variable is treated as needed.
 		
 		if [[ "$1" =~ ^www.* ]]; then #Case 'www.domain.tld' => Remove "www." and save.
 			domain=$(echo $1 | sed 's/www.//g')
@@ -315,14 +312,14 @@ function check_if_ip_or_domain () { #The object of this function is to execute S
 							
 			else #Case "domain" => Do nothing.
 				echo -e "\n\t[*] Gathering information related to $domain"
-			fi
-		
+			fi		
 		else
-			#Case "domain.tld" => Do nothing.
+			#Case "domain.tld" => Do nothing else.
 			domain="$1"
 			echo -e "\n\t[*] Gathering information related to $domain"
 		fi
 		
+		#IP is obtained by using "dig" command.
 		#Because "dig" may return diferent values when a domain is specified with and without "www", it's executed for both cases.
 		ip_with_www=$(echo $(dig +short "www.$domain") | sed 's/ /,/g')
 		ip_without_www=$(echo $(dig +short "$domain") | sed 's/ /,/g')
@@ -330,17 +327,40 @@ function check_if_ip_or_domain () { #The object of this function is to execute S
 		#Join all IPs in a single variable and delete duplicated ones. If there is still any domain, ignore it.
 		ip_list=$(echo $ip_with_www,$ip_without_www | tr ',' '\n' | grep -v '^$' | sort | uniq -i | tr '\n' ','); ip_list=$(echo "${ip_list%?}")
 		stats_for_domain=$ip_list #This variable will be used only when user wants to print stats by specifying a domain
-		
 		for ip in $(echo $ip_list | sed "s/,/ /g") #For each comma-separated IP, and if it's an IP, then call shodan2CVE. Otherwise, ignore it. 
 		do
 			if [[ ! "$ip" =~ [A-Za-z] ]]; then
 				sleep 1.5 #Add 1.5 seconds delay because shodan has a massive API call control.
-				shodan2CVE $ip
+				checkElapsedTime $ip $2
 			fi
-		done			
+		done
 	else	#If there are no letters (its an IP), used directly.
 		echo -e "\n\t[*] Gathering information related to $1"
-		shodan2CVE $1
+		checkElapsedTime $1 $2
+	fi
+}
+
+function checkElapsedTime () { #Check elapsed time between last analysis.
+	if [ -f $HOME/Desktop/Shodan2CVE/CVE/$1.txt ]; then #If the IP has been analysed, check elapsed time between analysis.
+		if [ "$2" != "stats" ]; then #If we want to print just the statistics, don't call checkElapsedTime()
+			let elapsed_time=$(date +%s)-$(stat -c %Y $HOME/Desktop/Shodan2CVE/CVE/$1.txt)
+			if [[ $elapsed_time -gt 86400 ]]; then #If has passed more than 24 hours (86400 sec), analyse it directly.
+				shodan2CVE $1 
+			else
+				#If analysed withing the last 24 hours, ask the user to analyse again or not.
+				read -p "        [*] $1 has been analysed within the last 24 hours. Do you want to check it again? [Y/N] " response
+				case "${response}" in
+					y|Y )
+						shodan2CVE $1  
+				    		;;
+					n|N|* )
+						;;
+				esac
+
+			fi
+		fi
+	else 	#In case that the file does not exist, this is, the IP was not analysed, analyse it directly.
+		shodan2CVE $1 
 	fi
 }
 
@@ -357,7 +377,7 @@ function print_CVE_data () {
 	matches_ok=$(echo $crit_cvss_ok | tr -cd ';' | wc -c)
 
 	if [[ $matches_nok -eq 1 ]]; then
-		#matches_nok=1 means that CVSSv3 is missing, so "N/A;N/A;" is appended to the variable. 
+		#matches_nok=1 means that CVSSv3 is missing, so string "N/A;N/A;" is appended to the variable. Otherwise, no action is needed.
 		na="N/A;N/A;"
 		crit_cvss=${na}${crit_cvss_ok}
 		
@@ -379,7 +399,7 @@ function print_CVE_data () {
 
 function showHelp () {
 	printf "
-For a correct execution, save $0 in '$HOME/Desktop/Shodan2CVE' and run Shodan with a subscription API_KEY.
+For a correct execution, save $0 in '$HOME/Desktop/Shodan2CVE'.
 Usage: ./Shodan2CVE.sh [OPTION] [ARGUMENT]
 
 Options:
@@ -392,17 +412,7 @@ Options:
 	-sf, --stats-file [file]	Show stats from the IPs or domains contained in the '.txt' file passed as argument.
 	-c, --cve [CVE-YYYY-XXXXX]	Print information from one or more given comma-separated CVE ID.
 	-r, --release			Show release notes and exit.
-	
-Examples: 	
-	./Shodan2CVE.sh -i 8.8.8.8,8.8.4.4
-	./Shodan2CVE.sh --domain twitch.tv,https://youtube.es
-	./Shodan2CVE.sh -f list.txt
-	./Shodan2CVE.sh -m => As a result the file 'final_file.csv' will be created.
-	./Shodan2CVE.sh list => Filename will be 'list.csv'.
-	./Shodan2CVE.sh --stats => Print statistics from all previously analysed IPs.
-	./Shodan2CVE.sh -s 8.8.8.8,8.8.4.4,https://google.com => Print statistics for these IPs/domains.
-	./Shodan2CVE.sh --cve CVE-2021-29935,CVE-2019-1694
-"
+	"
 }
 
 function showRelease () {
@@ -410,31 +420,36 @@ function showRelease () {
 	
 v1.0  	What's new?
 	|- First version.
-	|- Supported information gathering from an individual IP, passed as argument.
-	|- Merge CVE results in a single CSV file, with a default or custom name.
+	|- Supported information gathering for an individual IP, passed as argument.
+	|- Merge results in a single CSV file, with a default or a custom name.
 
 v1.1	What's new?
-	|- Added argument management to gather information from several comma-separated IPs or from text file.
+	|- Added argument management to gather information from several comma-separated IPs or from a text file.
 	|- Show statistics for one or more specified IPs.
 
 	Bugfixes
 	|- Manage cases like CVE-2021-32802, when more than one CVSS scoring source is returned.
 
 v1.2	What's new?
-	|- Domain treatment, passed either from command line or from a file.
-	|- If no specified target, statistics for each previously analysed IP. In addition, automatic anaysis if the IP has not been analysed.
+	|- Integration of domain analysis, passed either from command line or from a file.
+	|- If no specified target, statistics are printed for each previously analysed IP. 
+	   In addition, an automatic analysis is executed if the requested IP has not been analysed yet.
 
-	Bugfixes
-	|- 'dig' is used to obtain the IP from a given domain but, because it may return more than one IP, its response is treated in the way that,
-	   if there is any duplicated IP, it's just scanned once.
+v1.2	Bugfixes
+	|- Because a domain may have several assigned IPs, its response is treated in the way that duplicated IPs are not analysed twice.
 	   
 v1.3    What's new?
-	|- Supported domain statistics. When an user requests for a domain statistics, shows its IPs.
-	|- Show coloured statistics, based on IPs or domains contained in a text file.
-	|- Print comma-separated CVE information.
+	|- Supported domain statistics, printing results for its associated IPs.
+	|- Show coloured statistics.
+	|- Print comma-separated CVEs information.
 	
 	Bugfixes
 	|- Solve cases when the first line of the merged file is blank.
+	|- Control cases where some file registries are not being considered.
+	|- Domain management when printing its associated IPs.
+
+v1.4    What's new?
+	|- If an IP has been analysed within the last 24 hours, ask the user to analyse it again.
 "
 }
 
@@ -448,7 +463,7 @@ v1.3    What's new?
 	credits
 	case $param in
 
-		--ip | --domain | -i | -d)  
+		--ip | --domain | -i | -d)     #If '-i' execute once per IP/domain passed as argument.
 			if [[ "$(echo $2 | rev)" =~ ^txt.* ]]; then
 				echo "Please specify one or more comma-separated IPs or domains. For files use '-f' option."
 			else		
@@ -459,15 +474,17 @@ v1.3    What's new?
 			fi
 			;;
 
-                --file | -f)
+                --file | -f)	#If '-f' read file until EOF.
                 	cp $2 tempfile.txt #A temporary file is used because otherwise a new line is appended to the input file for some reason.
-			new_line=" "; echo $new_line >> tempfile.txt #Blank line is added, otherwise the last registry is not read.
-			num_lines=$(sed -n '$=' $2) 
+			new_line=" "; echo $new_line >> tempfile.txt #Blank line is added because otherwise the last registry is not read.
+			num_lines=$(sed -n '$=' $2) #Save number of entries.
 			echo -e "Reading target IPs or domains from file. Number of entries: $num_lines"
-			while IFS= read -r line 
+			line=$(tr -s '\n ' ',' < $2); #Save all the registries in a variable, so then are sent one by one for analysis.
+						      #If each registry is sent using 'read' file command, it's not working fine.
+			for i in $(echo $line | sed "s/,/ /g")
 			do
-				check_if_ip_or_domain $line
-			done < "tempfile.txt"
+				check_if_ip_or_domain $i
+			done
 			;;
 
 		--merge | -m)	#Merge all files in a single one.
@@ -482,15 +499,15 @@ v1.3    What's new?
 			fi
 			;;
 			
-		--stats | -s) 
-			if [[ $# -eq 2 ]]; then #If there are 3 arguments it means that we have script_name + argument + IPs/domains.
+		--stats | -s) #Show stats from one or more given comma-separated IP (variable 'i').
+			if [[ $# -eq 2 ]]; then #If there are 3 arguments it means that we have script_name + argument + IPs/domains/file.
 
-				if [[ "$(echo $2 | rev)" =~ ^txt.* ]]; then 
+				if [[ "$(echo $2 | rev)" =~ ^txt.* ]]; then #If the user introduces a text file, show an error an exit.
 		                	cp $2 tempfile.txt #A temporary file is used, otherwise a new line is appended to the input file
 					new_line=" "; echo $new_line >> tempfile.txt #Blank line is added because otherwise the last registry is not read.
                				num_lines=$(sed -n '$=' $2)
 					echo -e "Reading target IPs or domains from file. Number of entries: $num_lines"
-					while IFS= read -r line 
+					while IFS= read -r line #Each line has an IP/domain so check_ip_or_domain function is called for each one.
 					do
 						statistics $line
 					done < "tempfile.txt"
@@ -512,7 +529,7 @@ v1.3    What's new?
 			fi
 			;;
 
-		--stats-file | -sf) #Show stats for IPs saved in a file. This option is no needed anymore, '-s' accepts files.
+		--stats-file | -sf) #Show stats for IPs saved in a file. #This option is no needed, '-s' accepts files.
 			cp $2 tempfile.txt #A temporary file is used because otherwise a new line is appended to the input file for some reason.
 			new_line=" "; echo $new_line >> tempfile.txt #Blank line is added because otherwise the last registry is not read.
 			num_lines=$(sed -n '$=' $2)
